@@ -1,54 +1,55 @@
-// Creat web server
-// 1. Require express
-// 2. Create an express application
-// 3. Create a route for GET /comments
-// 4. Create a route for POST /comments
-// 5. Create a route for DELETE /comments/:id
-// 6. Listen on port 3000
-
-const express = require('express');
+// Create web server
+const http = require('http');
 const fs = require('fs');
-const app = express();
-const comments = require('./comments.json');
+const path = require('path');
+const url = require('url');
+const { getComments, addComment } = require('./comments');
 
-app.use(express.json());
-
-app.get('/comments', (req, res) => {
-    res.json(comments);
-});
-
-app.post('/comments', (req, res) => {
-    const comment = req.body;
-    comments.push(comment);
-
-    fs.writeFile('comments.json', JSON.stringify(comments), (err) => {
+const server = http.createServer((req, res) => {
+  const { pathname, query } = url.parse(req.url, true);
+  if (req.method === 'GET') {
+    if (pathname === '/comments') {
+      getComments((err, comments) => {
         if (err) {
-            res.status(500).send('Could not write to file');
-        } else {
-            res.status(201).send('Comment added');
+          res.writeHead(500, { 'Content-Type': 'text/plain' });
+          res.end('Internal Server Error');
+          return;
         }
-    });
-});
-
-app.delete('/comments/:id', (req, res) => {
-    const id = req.params.id;
-    const index = comments.findIndex(comment => comment.id == id);
-
-    if (index === -1) {
-        res.status(404).send('Comment not found');
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(comments));
+      });
     } else {
-        comments.splice(index, 1);
-
-        fs.writeFile('comments.json', JSON.stringify(comments), (err) => {
-            if (err) {
-                res.status(500).send('Could not write to file');
-            } else {
-                res.status(200).send('Comment deleted');
-            }
-        });
+      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      res.end('Not Found');
     }
+  } else if (req.method === 'POST') {
+    if (pathname === '/comments') {
+      let body = '';
+      req.on('data', (chunk) => {
+        body += chunk;
+      });
+      req.on('end', () => {
+        const comment = JSON.parse(body);
+        addComment(comment, (err) => {
+          if (err) {
+            res.writeHead(500, { 'Content-Type': 'text/plain' });
+            res.end('Internal Server Error');
+            return;
+          }
+          res.writeHead(201, { 'Content-Type': 'text/plain' });
+          res.end('Created');
+        });
+      });
+    } else {
+      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      res.end('Not Found');
+    }
+  } else {
+    res.writeHead(405, { 'Content-Type': 'text/plain' });
+    res.end('Method Not Allowed');
+  }
 });
 
-app.listen(3000, () => {
-    console.log('Server is running on port 3000');
-});
+server.listen(3000);
+
+console.log('Server running at http://localhost:3000/');
